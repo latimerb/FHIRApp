@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<script src='dist/fhir-client-v2.js'>
+	</script>
+</head>
+
+<body>
+	<p>Hello, I am the page "launch.html"</p>
+
+	<script>
+		FHIR.oauth2.authorize({
+      'client_id': '111-222-333-444-555',
+      'scope':  'online_access profile openid fhirUser launch/patient patient/*.*',
+      'redirect_uri': 'http://0.0.0.0:8000/app.html'
+    });
+	</script>
+
+</body>
+
+</html>
