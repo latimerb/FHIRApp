@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+	<script src='dist/fhir-client-v2.js'></script>
+
+	<script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/underscore.js/1.12.0/underscore-min.js" integrity="sha512-BDXGXSvYeLxaldQeYJZVWXJmkisgMlECofWFXKpWwXnfcp/R708nrs/BtNLH5cb/5TE7aeYRTDBRXu6kRL4VeQ==" crossorigin="anonymous"></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dayjs/1.10.2/dayjs.min.js" integrity="sha512-0fcCRl828lBlrSCa8QJY51mtNqTcHxabaXVLPgw/jPA5Nutujh6CbTdDgRzl9aSPYW/uuE7c4SffFUQFBAy6lg==" crossorigin="anonymous"></script>
+
+  <style>
+    #main{background:lightgray; margin:1em; padding:1em;font-size:2em;}
+  </style>
+</head>
+
+<body>
+
+  <div id="main"></div>
+
+	<script>
+
+		var myApp = {}
+
+    FHIR.oauth2.ready()
+    .then(function(client){ 
+      myApp.smart = client
+      doRequests()
+    })
+
+    async function doRequests(){
+
+// cvx codes are at https://www.cdc.gov/vaccines/programs/iis/code-sets.html
+
+      var obs = await fetch(myApp.smart.state.serverUrl+"/Immunization?patient="+myApp.smart.patient.id,{
+        headers:{  
+          "Accept":"application/json+fhir",
+          "Authorization":"Bearer "+myApp.smart.state.tokenResponse.access_token
+        }
+        }).then(function(data){
+          return data
+      })
+
+      var response = await obs.json()
+
+      console.log("All Immunizations", response)
+
+      var filtered_covid = _.filter(response.entry, function(val,index){
+
+//207 = Moderna - 28 days to second shot
+//208 = Pfizer - 21 days to second shot
+
+        var found = _.find(val.resource.vaccineCode.coding, function(v,i){
+          if (v.system === "http://hl7.org/fhir/sid/cvx" && (v.code == "207" || v.code == "208") ){ return v }
+        })
+        if (found){ return val }
+
+      })
+
+      console.log(filtered_covid)
+
+      var filtered_flu = _.filter(response.entry, function(val,index){
+        var found = _.find(val.resource.vaccineCode.coding, function(v,i){
+          if (v.system === "http://hl7.org/fhir/sid/cvx" && (v.code == "140") ){ return v }
+        })
+        if (found){ return val }
+
+      })
+
+      var toInsert = ""
+
+      if (filtered_covid.length === 0){
+
+        toInsert += "We could not find that you got a covid vaccination."
+
+      }else{
+        
+        toInsert += "You got the following covid vaccines: <br/>"
+
+        _.each(filtered_covid, function(val,index){
+
+            toInsert += "<p><b><i>"+val.resource.vaccineCode.coding[0].display+"</i></b> on "+val.resource.occurrenceDateTime+"</p>"
+
+        })
+
+    }
+
+    if (filtered_flu.length !== 0){
+      toInsert += "You got the following flu vaccines: <br/>"
+      _.each(filtered_flu, function(val,index){
+        toInsert += "<p><b><i>"+val.resource.vaccineCode.coding[0].display+"</i></b> on "+val.resource.occurrenceDateTime+"</p>"
+      })
+    } 
+
+      $("#main").html(toInsert)
+}
+
+async function createImmunization(){
+
+      var data = {
+        "resourceType": "Immunization",
+        "status": "completed",
+        "occurrenceDateTime": dayjs().format(),
+        "performer":[
+          {
+            "actor": {
+              "reference": "Practitioner/a6ba35b7-22d7-4bea-b87b-afbc9ff2f2ee",
+            }
+          }
+        ],
+      "vaccineCode": {
+      "coding": [
+          {
+          "system": "http://hl7.org/fhir/sid/cvx",
+          "code": "207",
+          "display": "Moderna COVID-19 Vaccine",
+          "userSelected": false
+          }
+      ],
+          "text": "Moderna COVID-19 Vaccine"
+      },
+        "patient": {
+          "reference": "Patient/"+myApp.smart.patient.id
+        }
+      }
+
+      var obs = await fetch(myApp.smart.state.serverUrl+"/Immunization",{
+          headers:{  
+            "Accept":"application/json+fhir",
+            "Content-Type":"application/json+fhir",
+            "Authorization":"Bearer "+myApp.smart.state.tokenResponse.access_token
+          },
+          method: "POST",
+          body: JSON.stringify(data)
+        }).then(function(data){
+          return data
+      })
+
+}
+
+	</script>
+
+</body>
+
+</html>
